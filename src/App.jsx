@@ -1,7 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { QRCodeCanvas } from 'qrcode.react';
-import { Download, Share2, Type, Palette, Maximize } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { SOCIAL_ICONS } from './constants/socialIcons';
+import { translations } from './constants/translations';
+import Controls from './components/Controls';
+import QRPreview from './components/QRPreview';
+import ShareModal from './components/ShareModal';
 
 /**
  * Modern QR Code Generator
@@ -13,18 +16,28 @@ function App() {
     const [bgColor, setBgColor] = useState('#ffffff');
     const [tagText, setTagText] = useState('SCAN ME');
     const [showTag, setShowTag] = useState(true);
-    const [tagPosition, setTagPosition] = useState('top'); // 'top' or 'bottom'
+    const [tagPosition, setTagPosition] = useState('top'); // 'top', 'bottom', 'left', 'right'
     const [showCaption, setShowCaption] = useState(true);
     const [captionText, setCaptionText] = useState('mikit.org');
     const [tagFontSize, setTagFontSize] = useState(1.25); // rem
+    const [tagRotation, setTagRotation] = useState(0); // 0 or 180
     const [captionFontSize, setCaptionFontSize] = useState(0.875); // rem
     const [captionColor, setCaptionColor] = useState('#475569');
     const [isTransparent, setIsTransparent] = useState(false);
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [language, setLanguage] = useState('en'); // 'en' or 'pl'
+    const [logoImage, setLogoImage] = useState(null);
+    const [logoSize, setLogoSize] = useState(50);
+    const [logoExcavate, setLogoExcavate] = useState(true);
+    const [centerText, setCenterText] = useState('');
+    const [useBrandColor, setUseBrandColor] = useState(false);
+    const [selectedPreset, setSelectedPreset] = useState(null);
 
+    const t = translations[language];
     const qrRef = useRef(null);
 
-    const downloadQR = async () => {
-        if (!qrRef.current) return;
+    const generateQRImage = async () => {
+        if (!qrRef.current) return null;
 
         try {
             const canvas = await html2canvas(qrRef.current, {
@@ -33,227 +46,214 @@ function App() {
                 logging: false,
                 useCORS: true,
                 onclone: (clonedDoc) => {
-                    if (isTransparent) {
-                        const wrapper = clonedDoc.querySelector('.qr-frame-wrapper');
-                        if (wrapper) {
+                    const wrapper = clonedDoc.querySelector('.qr-frame-wrapper');
+                    if (wrapper) {
+                        if (isTransparent) {
                             wrapper.style.background = 'transparent';
                             wrapper.style.boxShadow = 'none';
+                        }
+                        // Ensure layout is preserved in canvas
+                        wrapper.style.display = 'flex';
+                        if (['left', 'right'].includes(tagPosition)) {
+                            wrapper.style.flexDirection = 'row';
+                        } else {
+                            wrapper.style.flexDirection = 'column';
                         }
                     }
                 }
             });
-
-            const image = canvas.toDataURL("image/png");
-            const link = document.createElement('a');
-            link.href = image;
-            link.download = `qr-code-${captionText || 'generated'}${isTransparent ? '-transparent' : ''}.png`;
-            link.click();
+            return canvas.toDataURL("image/png");
         } catch (err) {
-            console.error('Download failed', err);
-            alert('Wystąpił błąd podczas pobierania kodu QR.');
+            console.error('QR Generation failed', err);
+            return null;
         }
     };
 
+    const copyToClipboard = () => {
+        if (!navigator.clipboard) {
+            alert("Clipboard not supported");
+            return;
+        }
+        navigator.clipboard.writeText(url);
+        alert(t.copied);
+    };
+
+    const downloadQR = async () => {
+        const image = await generateQRImage();
+        if (!image) {
+            alert(t.downloadError);
+            return;
+        }
+
+        const link = document.createElement('a');
+        link.href = image;
+        link.download = `qr-code-${captionText || 'generated'}${isTransparent ? '-transparent' : ''}.png`;
+        link.click();
+    };
+
+    const shareViaApi = async () => {
+        const image = await generateQRImage();
+        if (!image || !navigator.share) return;
+
+        try {
+            const blob = await (await fetch(image)).blob();
+            const file = new File([blob], 'qr-code.png', { type: 'image/png' });
+            await navigator.share({
+                title: t.shareTitle,
+                files: [file]
+            });
+        } catch (err) {
+            console.error('Sharing failed', err);
+        }
+    };
+
+    const handleLogoUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setLogoImage(reader.result);
+                setCenterText(''); // Clear text logo if image uploaded
+                setSelectedPreset(null);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const generateTextLogo = (text) => {
+        if (!text) return null;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 200;
+        canvas.height = 200;
+
+        // Background
+        ctx.fillStyle = isTransparent ? 'transparent' : bgColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Text
+        ctx.fillStyle = fgColor;
+        ctx.font = 'bold 80px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 100, 100);
+
+        return canvas.toDataURL();
+    };
+
+    const getBrandColor = (type) => {
+        const colors = {
+            facebook: '#1877F2',
+            instagram: '#E4405F',
+            x: '#000000',
+            linkedin: '#0A66C2',
+            youtube: '#FF0000',
+            whatsapp: '#25D366',
+            tiktok: '#000000',
+            telegram: '#26A5E4',
+            snapchat: '#FFFC00',
+            baidu: '#2529D8',
+            reddit: '#FF4500',
+            pinterest: '#BD081C',
+            github: '#181717'
+        };
+        return colors[type] || fgColor;
+    };
+
+    const getIconDataUrl = (type) => {
+        const path = SOCIAL_ICONS[type];
+        if (!path) return null;
+        const color = useBrandColor ? getBrandColor(type) : fgColor;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="${path}"/></svg>`;
+        return `data:image/svg+xml;base64,${btoa(svg)}`;
+    };
+
+    const activeLogo = logoImage || (centerText ? generateTextLogo(centerText) : null);
+
+    React.useEffect(() => {
+        if (selectedPreset) {
+            setLogoImage(getIconDataUrl(selectedPreset));
+        }
+    }, [fgColor, useBrandColor, selectedPreset]);
+
+
     return (
         <div className="app-container">
-            <div className="controls-section glass-card">
-                <div>
-                    <h1>Generator QR</h1>
-                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                        Stwórz stylowy kod QR z własnym opisem.
-                    </p>
-                </div>
+            <Controls
+                t={t}
+                language={language}
+                setLanguage={setLanguage}
+                url={url}
+                setUrl={setUrl}
+                fgColor={fgColor}
+                setFgColor={setFgColor}
+                tagText={tagText}
+                setTagText={setTagText}
+                tagPosition={tagPosition}
+                setTagPosition={setTagPosition}
+                tagFontSize={tagFontSize}
+                setTagFontSize={setTagFontSize}
+                tagRotation={tagRotation}
+                setTagRotation={setTagRotation}
+                showTag={showTag}
+                setShowTag={setShowTag}
+                captionText={captionText}
+                setCaptionText={setCaptionText}
+                captionFontSize={captionFontSize}
+                setCaptionFontSize={setCaptionFontSize}
+                captionColor={captionColor}
+                setCaptionColor={setCaptionColor}
+                showCaption={showCaption}
+                setShowCaption={setShowCaption}
+                isTransparent={isTransparent}
+                setIsTransparent={setIsTransparent}
+                downloadQR={downloadQR}
+                setIsShareModalOpen={setIsShareModalOpen}
+                logoImage={logoImage}
+                setLogoImage={setLogoImage}
+                handleLogoUpload={handleLogoUpload}
+                logoSize={logoSize}
+                setLogoSize={setLogoSize}
+                logoExcavate={logoExcavate}
+                setLogoExcavate={setLogoExcavate}
+                centerText={centerText}
+                setCenterText={setCenterText}
+                useBrandColor={useBrandColor}
+                setUseBrandColor={setUseBrandColor}
+                selectedPreset={selectedPreset}
+                setSelectedPreset={setSelectedPreset}
+                getIconDataUrl={getIconDataUrl}
+            />
 
-                <div className="input-group">
-                    <label>Link / Adres URL</label>
-                    <input
-                        type="url"
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        placeholder="https://example.com"
-                    />
-                </div>
+            <QRPreview
+                qrRef={qrRef}
+                url={url}
+                fgColor={fgColor}
+                bgColor={bgColor}
+                isTransparent={isTransparent}
+                showTag={showTag}
+                tagPosition={tagPosition}
+                tagText={tagText}
+                tagFontSize={tagFontSize}
+                tagRotation={tagRotation}
+                showCaption={showCaption}
+                captionText={captionText}
+                captionFontSize={captionFontSize}
+                captionColor={captionColor}
+                activeLogo={activeLogo}
+                logoSize={logoSize}
+                logoExcavate={logoExcavate}
+                t={t}
+            />
 
-                <div className="settings-grid">
-                    <div className="input-group">
-                        <label>Kolor kodu</label>
-                        <div className="color-picker">
-                            <input
-                                type="color"
-                                value={fgColor}
-                                onChange={(e) => setFgColor(e.target.value)}
-                            />
-                            <span style={{ fontSize: '0.8rem' }}>{fgColor}</span>
-                        </div>
-                    </div>
-
-                    <div className="input-group">
-                        <label>Tekst etykiety</label>
-                        <input
-                            type="text"
-                            value={tagText}
-                            onChange={(e) => setTagText(e.target.value)}
-                            placeholder="SCAN ME"
-                        />
-                    </div>
-                </div>
-
-                <div className="settings-grid">
-                    <div className="input-group">
-                        <label>Pozycja etykiety</label>
-                        <select
-                            value={tagPosition}
-                            onChange={(e) => setTagPosition(e.target.value)}
-                            style={{
-                                background: 'rgba(255,255,255,0.05)',
-                                color: 'white',
-                                border: '1px solid var(--border-color)',
-                                padding: '0.5rem',
-                                borderRadius: '8px'
-                            }}
-                        >
-                            <option value="top">Góra</option>
-                            <option value="bottom">Dół</option>
-                        </select>
-                    </div>
-                    <div className="input-group">
-                        <label>Wielkość etykiety: {tagFontSize}rem</label>
-                        <input
-                            type="range"
-                            min="0.5"
-                            max="6"
-                            step="0.1"
-                            value={tagFontSize}
-                            onChange={(e) => setTagFontSize(parseFloat(e.target.value))}
-                        />
-                    </div>
-                </div>
-
-                <div className="settings-grid">
-                    <div className="input-group">
-                        <label className="toggle-group">
-                            <input
-                                type="checkbox"
-                                checked={showTag}
-                                onChange={(e) => setShowTag(e.target.checked)}
-                            />
-                            Pokaż etykietę
-                        </label>
-                    </div>
-                </div>
-
-                <div className="input-group">
-                    <label>Czytelny link pod kodem</label>
-                    <input
-                        type="text"
-                        value={captionText}
-                        onChange={(e) => setCaptionText(e.target.value)}
-                        placeholder="mikit.org"
-                    />
-                    <div className="settings-grid" style={{ marginTop: '0.5rem' }}>
-                        <div className="input-group">
-                            <label className="toggle-group">
-                                <input
-                                    type="checkbox"
-                                    checked={showCaption}
-                                    onChange={(e) => setShowCaption(e.target.checked)}
-                                />
-                                Pokaż link
-                            </label>
-                        </div>
-                        <div className="input-group">
-                            <label>Wielkość linku: {captionFontSize}rem</label>
-                            <input
-                                type="range"
-                                min="0.5"
-                                max="6"
-                                step="0.05"
-                                value={captionFontSize}
-                                onChange={(e) => setCaptionFontSize(parseFloat(e.target.value))}
-                            />
-                        </div>
-                    </div>
-                    <div className="input-group" style={{ marginTop: '0.5rem' }}>
-                        <label>Kolor linku</label>
-                        <div className="color-picker">
-                            <input
-                                type="color"
-                                value={captionColor}
-                                onChange={(e) => setCaptionColor(e.target.value)}
-                            />
-                            <span style={{ fontSize: '0.8rem' }}>{captionColor}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="input-group">
-                    <label className="toggle-group">
-                        <input
-                            type="checkbox"
-                            checked={isTransparent}
-                            onChange={(e) => setIsTransparent(e.target.checked)}
-                        />
-                        Eksport z przezroczystym tłem
-                    </label>
-                </div>
-
-                <div className="download-buttons" style={{ marginTop: '1rem' }}>
-                    <button onClick={downloadQR}>
-                        <Download size={20} /> Pobierz PNG
-                    </button>
-                    <button className="secondary">
-                        <Share2 size={20} /> Udostępnij
-                    </button>
-                </div>
-            </div>
-
-            <div className="preview-section">
-                <div
-                    className="qr-frame-wrapper"
-                    ref={qrRef}
-                    style={{ background: isTransparent ? 'transparent' : bgColor }}
-                >
-                    {showTag && tagPosition === 'top' && (
-                        <div
-                            className="scan-me-tag"
-                            style={{ background: fgColor, fontSize: `${tagFontSize}rem` }}
-                        >
-                            {tagText}
-                        </div>
-                    )}
-
-                    <QRCodeCanvas
-                        value={url}
-                        size={256}
-                        fgColor={fgColor}
-                        bgColor={isTransparent ? 'transparent' : bgColor}
-                        level="H"
-                        includeMargin={false}
-                    />
-
-                    {showTag && tagPosition === 'bottom' && (
-                        <div
-                            className="scan-me-tag bottom"
-                            style={{ background: fgColor, fontSize: `${tagFontSize}rem` }}
-                        >
-                            {tagText}
-                        </div>
-                    )}
-
-                    {showCaption && (
-                        <div
-                            className="url-caption"
-                            style={{ fontSize: `${captionFontSize}rem`, color: captionColor }}
-                        >
-                            {captionText}
-                        </div>
-                    )}
-                </div>
-
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                    Podgląd na żywo {isTransparent ? '(przezroczysty)' : ''}
-                </p>
-            </div>
+            <ShareModal
+                isOpen={isShareModalOpen}
+                onClose={() => setIsShareModalOpen(false)}
+                t={t}
+                copyToClipboard={copyToClipboard}
+                downloadQR={downloadQR}
+                shareViaApi={shareViaApi}
+            />
         </div>
     );
 }
