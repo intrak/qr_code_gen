@@ -10,6 +10,27 @@ import ShareModal from './components/ShareModal';
  * Modern QR Code Generator
  * Features custom framing, scan-me labels, and readable URL captions.
  */
+import { Share2, Download, Check } from 'lucide-react';
+
+// Simple Toast Component
+const Toast = ({ show, message }) => {
+    if (!show) return null;
+    return (
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-[100] animate-slideUp">
+            <div className="bg-brand-dark/90 backdrop-blur-md border border-brand-accent/20 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3">
+                <div className="bg-brand-accent/20 p-1 rounded-full">
+                    <Check size={16} className="text-brand-accent" />
+                </div>
+                <span className="font-medium text-sm">{message}</span>
+            </div>
+        </div>
+    );
+};
+
+/**
+ * Modern QR Code Generator
+ * Features custom framing, scan-me labels, and readable URL captions.
+ */
 function App() {
     const [url, setUrl] = useState('https://mikit.org');
     const [fgColor, setFgColor] = useState('#1e293b');
@@ -33,8 +54,18 @@ function App() {
     const [useBrandColor, setUseBrandColor] = useState(false);
     const [selectedPreset, setSelectedPreset] = useState(null);
 
+    // Toast State
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+
     const t = translations[language];
     const qrRef = useRef(null);
+
+    const triggerToast = (msg) => {
+        setToastMessage(msg);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+    };
 
     const generateQRImage = async () => {
         if (!qrRef.current) return null;
@@ -71,17 +102,17 @@ function App() {
 
     const copyToClipboard = () => {
         if (!navigator.clipboard) {
-            alert("Clipboard not supported");
+            triggerToast("Clipboard not supported");
             return;
         }
         navigator.clipboard.writeText(url);
-        alert(t.copied);
+        triggerToast(t.copied);
     };
 
     const downloadQR = async () => {
         const image = await generateQRImage();
         if (!image) {
-            alert(t.downloadError);
+            triggerToast(t.downloadError);
             return;
         }
 
@@ -179,6 +210,7 @@ function App() {
 
     return (
         <div className="app-container">
+            <Toast show={showToast} message={toastMessage} />
             <Controls
                 t={t}
                 language={language}
