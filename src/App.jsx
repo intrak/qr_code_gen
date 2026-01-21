@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import html2canvas from 'html2canvas';
+import { generateSVGString } from './utils/qrUtils';
 import { SOCIAL_ICONS } from './constants/socialIcons';
 import { translations } from './constants/translations';
 import Controls from './components/Controls';
@@ -107,6 +108,38 @@ function App() {
         }
         navigator.clipboard.writeText(url);
         triggerToast(t.copied);
+    };
+
+    const downloadSVG = () => {
+        if (!qrRef.current) return;
+
+        const config = {
+            url,
+            fgColor,
+            bgColor,
+            isTransparent,
+            showTag,
+            tagPosition,
+            tagText,
+            tagFontSize,
+            tagRotation,
+            showCaption,
+            captionText,
+            captionFontSize,
+            captionColor,
+            logoSize,
+            logoExcavate,
+            qrSize: 256
+        };
+
+        const svgString = generateSVGString(qrRef, config);
+        const blob = new Blob([svgString], { type: 'image/svg+xml' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `qr-code-${captionText || 'generated'}.svg`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        triggerToast(t.downloadSuccess || 'SVG Downloaded!');
     };
 
     const downloadQR = async () => {
@@ -240,6 +273,7 @@ function App() {
                 isTransparent={isTransparent}
                 setIsTransparent={setIsTransparent}
                 downloadQR={downloadQR}
+                downloadSVG={downloadSVG}
                 setIsShareModalOpen={setIsShareModalOpen}
                 logoImage={logoImage}
                 setLogoImage={setLogoImage}
@@ -284,6 +318,7 @@ function App() {
                 t={t}
                 copyToClipboard={copyToClipboard}
                 downloadQR={downloadQR}
+                downloadSVG={downloadSVG}
                 shareViaApi={shareViaApi}
             />
         </div>

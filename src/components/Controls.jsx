@@ -31,6 +31,7 @@ const Controls = ({
     isTransparent,
     setIsTransparent,
     downloadQR,
+    downloadSVG,
     setIsShareModalOpen,
     logoImage,
     setLogoImage,
@@ -224,11 +225,14 @@ const Controls = ({
                 </label>
             </div>
 
-            <div className="flex gap-4 mt-4">
-                <button onClick={downloadQR} className={`${buttonClass} bg-brand-accent text-brand-dark`}>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+                <button onClick={downloadQR} className={`${buttonClass} bg-brand-accent text-brand-dark justify-center`}>
                     <Download size={20} /> {t.downloadBtn}
                 </button>
-                <button onClick={() => setIsShareModalOpen(true)} className={`${buttonClass} bg-white/10 text-white`}>
+                <button onClick={downloadSVG} className={`${buttonClass} bg-brand-accent text-brand-dark justify-center`}>
+                    <Download size={20} /> {t.downloadBtnSVG}
+                </button>
+                <button onClick={() => setIsShareModalOpen(true)} className={`${buttonClass} bg-white/10 text-white col-span-2 justify-center`}>
                     <Share2 size={20} /> {t.shareBtn}
                 </button>
             </div>

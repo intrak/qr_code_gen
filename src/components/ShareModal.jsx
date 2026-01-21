@@ -22,6 +22,9 @@ const ShareModal = ({ isOpen, onClose, t, copyToClipboard, downloadQR, shareViaA
                     <button className={btnClass} onClick={downloadQR}>
                         <Download size={20} /> {t.downloadBtn}
                     </button>
+                    <button className={btnClass} onClick={downloadSVG}>
+                        <Download size={20} /> {t.downloadBtnSVG}
+                    </button>
                     {navigator.share && (
                         <button className={btnClass} onClick={shareViaApi}>
                             <Share2 size={20} /> {t.shareViaApi}
